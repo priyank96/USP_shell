@@ -6,7 +6,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <pwd.h>
 
+#define CYAN    "\x1b[36m"
+#define RESET   "\x1b[0m"
 
 void insertArgument(SimpleCommand *simpleCommand, char *argument)
 {
@@ -29,15 +32,17 @@ void execute(Command *command)
 	int i = 0;
 	int tmpin = dup(0); // should use constants
 	int tmpout = dup(1);
+    printf("executing! %d\n",command->num_simple_commands);
 
 	int fdin;
 	if(command->in_file){
-	fdin = open(command->in_file,O_RDONLY);
+	    fdin = open(command->in_file,O_RDONLY);
 	}
 	else{
 		fdin = dup(tmpin);
 	}
-	
+    printf("executing! %d\n",command->num_simple_commands);
+
 	int fdout;
 
 	for(i;i<command->num_simple_commands;i++)
@@ -46,7 +51,8 @@ void execute(Command *command)
 		insertArgument(command->simple_commands[i], NULL);
 		dup2(fdin,0);
 		close(fdin);
-	
+        printf("executing! %d\n",command->num_simple_commands);
+
 		if(i == command->num_simple_commands-1){
 			if(command->out_file){
 				fdout = open(command->out_file,O_CREAT|O_WRONLY);
@@ -63,6 +69,7 @@ void execute(Command *command)
 			fdout=fdpipe[1];
 			fdin=fdpipe[0];
 		}
+        printf("executing! %d\n",command->num_simple_commands);
 
 		dup2(fdout,1); // use constants
 		close(fdout);		
@@ -83,14 +90,25 @@ void execute(Command *command)
 		{
 			waitpid(ret,NULL,0);
 		}
-		
+        printf("executing! %d\n",command->num_simple_commands);
+
 	}
 	dup2(tmpin,0); // use constants
 	dup2(tmpout,1);
 	close(tmpin);	
 	close(tmpout);
-	
 
-	printf(">>");
+    printf("executing! %d\n",command->num_simple_commands);
+
+
+	char cwd[1024];
+	char host[64];
+	struct passwd *pass;
+
+	getcwd(cwd, sizeof(cwd));
+	gethostname(host, sizeof(host));
+	pass = getpwuid(getuid());
+
+	printf("%s@%s:" CYAN "%s" RESET "$ ", pass->pw_name, host, cwd);
 
 }

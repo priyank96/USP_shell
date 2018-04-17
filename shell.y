@@ -2,6 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "command.h"
+#include <sys/wait.h>
+#include <unistd.h>
+#include <string.h>
+#include <pwd.h>
+
+#define CYAN    "\x1b[36m"
+#define RESET   "\x1b[0m"
 
 %}
 
@@ -53,7 +60,15 @@ command_list :  command_list {current_command = calloc(1,sizeof(Command));} comm
 
 int main()
 {
-	printf(">>");
+	char cwd[1024];
+	char host[64];
+	struct passwd *pass;
+
+	getcwd(cwd, sizeof(cwd));
+	gethostname(host, sizeof(host));
+	pass = getpwuid(getuid());
+
+	printf("%s@%s:" CYAN "%s" RESET "$ ", pass->pw_name, host, cwd);
 	yyparse();
 }
 

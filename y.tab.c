@@ -67,9 +67,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "command.h"
+#include <sys/wait.h>
+#include <unistd.h>
+#include <string.h>
+#include <pwd.h>
+
+#define CYAN    "\x1b[36m"
+#define RESET   "\x1b[0m"
 
 
-#line 73 "y.tab.c" /* yacc.c:339  */
+#line 80 "y.tab.c" /* yacc.c:339  */
 
 # ifndef YY_NULLPTR
 #  if defined __cplusplus && 201103L <= __cplusplus
@@ -144,7 +151,7 @@ int yyparse (void);
 
 /* Copy the second part of user declarations.  */
 
-#line 148 "y.tab.c" /* yacc.c:358  */
+#line 155 "y.tab.c" /* yacc.c:358  */
 
 #ifdef short
 # undef short
@@ -442,9 +449,9 @@ static const yytype_uint8 yytranslate[] =
   /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_uint8 yyrline[] =
 {
-       0,    14,    14,    18,    19,    22,    23,    23,    26,    27,
-      30,    31,    32,    33,    34,    37,    38,    40,    41,    43,
-      44,    45,    47,    47,    48
+       0,    21,    21,    25,    26,    29,    30,    30,    33,    34,
+      37,    38,    39,    40,    41,    44,    45,    47,    48,    50,
+      51,    52,    54,    54,    55
 };
 #endif
 
@@ -1235,67 +1242,67 @@ yyreduce:
   switch (yyn)
     {
         case 4:
-#line 19 "shell.y" /* yacc.c:1646  */
+#line 26 "shell.y" /* yacc.c:1646  */
     {insertArgument(current_simple_command,(yyvsp[0]));}
-#line 1241 "y.tab.c" /* yacc.c:1646  */
+#line 1248 "y.tab.c" /* yacc.c:1646  */
     break;
 
   case 6:
-#line 23 "shell.y" /* yacc.c:1646  */
+#line 30 "shell.y" /* yacc.c:1646  */
     {current_simple_command = malloc(sizeof(SimpleCommand));insertArgument(current_simple_command,(yyvsp[0]));}
-#line 1247 "y.tab.c" /* yacc.c:1646  */
+#line 1254 "y.tab.c" /* yacc.c:1646  */
     break;
 
   case 8:
-#line 26 "shell.y" /* yacc.c:1646  */
+#line 33 "shell.y" /* yacc.c:1646  */
     { insertSimpleCommand(current_command,current_simple_command); }
-#line 1253 "y.tab.c" /* yacc.c:1646  */
+#line 1260 "y.tab.c" /* yacc.c:1646  */
     break;
 
   case 9:
-#line 27 "shell.y" /* yacc.c:1646  */
+#line 34 "shell.y" /* yacc.c:1646  */
     { insertSimpleCommand(current_command,current_simple_command); }
-#line 1259 "y.tab.c" /* yacc.c:1646  */
+#line 1266 "y.tab.c" /* yacc.c:1646  */
     break;
 
   case 11:
-#line 31 "shell.y" /* yacc.c:1646  */
+#line 38 "shell.y" /* yacc.c:1646  */
     {current_command->out_file = strdup((yyvsp[0]));}
-#line 1265 "y.tab.c" /* yacc.c:1646  */
+#line 1272 "y.tab.c" /* yacc.c:1646  */
     break;
 
   case 14:
-#line 34 "shell.y" /* yacc.c:1646  */
+#line 41 "shell.y" /* yacc.c:1646  */
     {current_command->in_file = strdup((yyvsp[0]));}
-#line 1271 "y.tab.c" /* yacc.c:1646  */
+#line 1278 "y.tab.c" /* yacc.c:1646  */
     break;
 
   case 17:
-#line 40 "shell.y" /* yacc.c:1646  */
+#line 47 "shell.y" /* yacc.c:1646  */
     {current_command->background = 1;}
-#line 1277 "y.tab.c" /* yacc.c:1646  */
+#line 1284 "y.tab.c" /* yacc.c:1646  */
     break;
 
   case 21:
-#line 45 "shell.y" /* yacc.c:1646  */
+#line 52 "shell.y" /* yacc.c:1646  */
     {yyerrok;}
-#line 1283 "y.tab.c" /* yacc.c:1646  */
+#line 1290 "y.tab.c" /* yacc.c:1646  */
     break;
 
   case 22:
-#line 47 "shell.y" /* yacc.c:1646  */
+#line 54 "shell.y" /* yacc.c:1646  */
     {current_command = calloc(1,sizeof(Command));}
-#line 1289 "y.tab.c" /* yacc.c:1646  */
+#line 1296 "y.tab.c" /* yacc.c:1646  */
     break;
 
   case 23:
-#line 47 "shell.y" /* yacc.c:1646  */
+#line 54 "shell.y" /* yacc.c:1646  */
     {if(current_command!=NULL){execute(current_command);}}
-#line 1295 "y.tab.c" /* yacc.c:1646  */
+#line 1302 "y.tab.c" /* yacc.c:1646  */
     break;
 
 
-#line 1299 "y.tab.c" /* yacc.c:1646  */
+#line 1306 "y.tab.c" /* yacc.c:1646  */
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires
@@ -1523,13 +1530,21 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 51 "shell.y" /* yacc.c:1906  */
+#line 58 "shell.y" /* yacc.c:1906  */
 
 #include"lex.yy.c"
 
 int main()
 {
-	printf(">>");
+	char cwd[1024];
+	char host[64];
+	struct passwd *pass;
+
+	getcwd(cwd, sizeof(cwd));
+	gethostname(host, sizeof(host));
+	pass = getpwuid(getuid());
+
+	printf("%s@%s:" CYAN "%s" RESET "$ ", pass->pw_name, host, cwd);
 	yyparse();
 }
 

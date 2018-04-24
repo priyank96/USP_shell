@@ -3,129 +3,262 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <pwd.h>
+#include <time.h>
+#include <fcntl.h>
 
+#define MAX_CMD_LEN 100
 #define NUM_TOKEN 10
+#define NUM_CMDS 5
 #define DELIMITERS " \t\r\n\a"
 
+#define CYAN    "\x1b[36m"
+#define RED    "\x1b[95m"
+#define RESET   "\x1b[0m"
 
-int lsh_cd(char **args);
-int lsh_help(char **args);
-int lsh_exit(char **args);
 
-char *builtin_str[] = {
-  "cd",
-  "help",
-  "exit"
-};
+struct history {
+    char cmd[MAX_CMD_LEN];
+    struct tm* timeinfo;
+    int bleh;
+} hist[25];
 
-int (*builtin_func[]) (char **) = {
-  &lsh_cd,
-  &lsh_help,
-  &lsh_exit
-};
+int count = 0;
 
-int lsh_num_builtins() {
-  return sizeof(builtin_str) / sizeof(char *);
+
+void put_history(char *cmd) {
+
+    hist[count].bleh = 1;
+    strcpy(&hist[count].cmd, cmd);
+    hist[count].cmd[strlen(cmd)+1] = '\n';
+
+    time_t rawtime;
+    time(&rawtime);
+    hist[count].timeinfo = localtime(&rawtime);
+
+    count = (count+1)%25;
 }
 
-
-int lsh_cd(char **args)
-{
-  if (args[1] == NULL) {
-    fprintf(stderr, "lsh: expected argument to \"cd\"\n");
-  } else {
-    if (chdir(args[1]) != 0) {
-      perror("lsh");
+void get_history() {
+    for(int i = 0; i < 25; i++) {
+        if (hist[i].bleh) {
+            char curr_time[32];
+            //strftime(curr_time, 32, "_%Y_%m_%d_%H_%M", );
+            printf("%s" RED "%s\n" RESET, asctime(hist[i].timeinfo), hist[i].cmd);
+        }
     }
-  }
-  return 1;
-}
-int lsh_exit(char **args)
-{
-  return 0;
 }
 
-int lsh_launch(char **args)
-{
-  pid_t pid, wpid;
-  int status;
+char *read_alias(char *cmd) {
 
-  pid = fork();
-  if (pid == 0) {
-    // Child process
-    if (execvp(args[0], args) == -1) {
-      perror("lsh");
+    FILE *fp;
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t read;
+
+    fp = fopen("/home/vyam/.usp_rc", "r");
+    if (fp == NULL)
+        exit(EXIT_FAILURE);
+
+    char * ret = NULL;
+    char * dub = NULL;
+    while ((read = getline(&line, &len, fp)) != -1) {
+        //char **args = malloc(NUM_TOKEN * sizeof(char*));
+        //printf("jhk %s\n", line);
+        dub = strdup(line);
+        char *token = strtok(line, "=");
+        token = strtok(line, "=");
+
+        if(strcmp(token, cmd) == 0) {
+            ret = strdup(dub+strlen(token)+1);
+            break;
+        }
     }
-    exit(EXIT_FAILURE);
-  } else if (pid < 0) {
-    // Error forking
-    perror("lsh");
-  } else {
-    // Parent process
-    do {
-      wpid = waitpid(pid, &status, WUNTRACED);
-    } while (!WIFEXITED(status) && !WIFSIGNALED(status));
-  }
 
-  return 1;
+    fclose(fp);
+
+    return ret;
 }
 
-int lsh_execute(char **args)
-{
-  int i;
+int exec_process(char **args, int num_tokens) {
+    pid_t pid; // for pid of child
 
-  if (args[0] == NULL) {
-    // An empty command was entered.
-    return 1;
-  }
+    int status; // for return of waitpid
 
-  for (i = 0; i < lsh_num_builtins(); i++) {
-    if (strcmp(args[0], builtin_str[i]) == 0) {
-      return (*builtin_func[i])(args);
-    }
-  }
+	// arguments to pass to execvp
+	char **exec_args[NUM_CMDS];
+	exec_args[0] = malloc(NUM_TOKEN * sizeof(char*));
+	int args_count = 0;
+    
+	// for i/o redirection 
+    int in_fd = dup(0);
+    int out_fd = dup(1);
+	int tmp_in = dup(0);
+	int tmp_out = dup(1);
+	int out_file_fd = -1;
+	//for piping
+	int num_cmds = 1;
+	int pipe_fd[2];
+	pipe(pipe_fd);
 
-  return lsh_launch(args);
-}
-
-
-
-
-char **get_tokens(char *line)
-{
+	int i = 0;    
+	while(i < num_tokens)
+    {
+		if(strcmp(args[i],"|")==0)
+		{
+			exec_args[num_cmds-1][args_count] = NULL;			
+			exec_args[num_cmds] = malloc(NUM_TOKEN * sizeof(char*));			
+			num_cmds++;
+			args_count= 0;			
+			i++;				
+		}
+        else if(strcmp(args[i],"<")==0)
+        {
+            in_fd = open(args[i+1],O_RDONLY);
+            i+=2;	    
+		}
+        else if(strcmp(args[i],">")==0)
+        {
+			
+						          
+            out_file_fd = open(args[i+1],O_CREAT|O_WRONLY,0777);
+            i+=2;
+			
+			
 	
-	int position = 0;
-	char **tokens = malloc(NUM_TOKENS * sizeof(char*));
-	char *token = strtok(line, DELIMITERS);
+		}
+		else
+		{
+			exec_args[num_cmds-1][args_count++] = strdup(args[i++]);
+		}  
+    }
+	exec_args[num_cmds-1][args_count] = NULL;
+	for(i=0;i<num_cmds;i++)
+	{		
+		dup2(in_fd,0);
+		close(in_fd); 
+		if( i+1 == num_cmds)
+		{
+			if(out_file_fd != -1)
+				dup2(out_file_fd,1);
+			else
+				dup2(tmp_out,1);
+		}
+		else
+		{
+			int fdpipe[2];
+			pipe(fdpipe);
+			out_fd = fdpipe[1];
+			in_fd = fdpipe[0];
+		}
+		dup2(out_fd,1);
+		close(out_fd);
+		if((pid=fork())==-1)
+		   perror("Shell: can't fork: %s\n");
 
-	while (token != NULL)
-	{
-		tokens[position++] = token;
-		token = strtok(NULL, DELIMITERS);
+		else if(pid==0)
+		{
+		    
+			
+			if (execvp(exec_args[i][0], exec_args[num_cmds-1]) == -1)
+		    {
+		        perror("Shell: can't exec \n");
+		        exit(1);
+		    }
+		}
+		if((pid=waitpid(pid,&status,0))<0)
+		    perror("Shell: waitpid error: %s\n");
 	}
-	tokens[position] = NULL; // passing list to exec has to be null terminated
-	return tokens;
+	dup2(tmp_in,0);
+	dup2(tmp_out,1);	
+	
+	for(i=0;i<num_cmds;i++)
+		free(exec_args[i]);
 }
+
 
 int main(int argc, char **argv)
 {
 
-	char **args;
-	int status = 1;
-	
-	char *line = NULL;
-	long bufsize = 0; // getline allocates a buffer
-  while (status)
-	{
-		printf("> ");
-		getline(&line, &bufsize, stdin);
-		args = get_tokens(line);
-		status = lsh_execute(args);
+    while (1)
+    {
+        char cwd[1024];
+        char host[64];
+        struct passwd *pass;
 
-		free(line);
-		free(args);
-	} 
+        getcwd(cwd, sizeof(cwd));
+        gethostname(host, sizeof(host));
+        pass = getpwuid(getuid());
 
-  return 0;
-}
+        printf("%s@%s:" CYAN "%s" RESET "$ ", pass->pw_name, host, cwd);
 
+        char *cmd = NULL;
+        long bufsize = 0;
+        getline(&cmd, &bufsize, stdin); // no need to allocate memory getline will allocate on its own
+		        
+		put_history(cmd);
+		
+        char *dub = strdup(cmd);
+        char **args = malloc(NUM_TOKEN * sizeof(char*));
+        char *token = strtok(cmd, DELIMITERS);
+
+        int i = 0;
+
+        char *alias = NULL;
+        if((alias = read_alias(token)) != NULL) {
+            token = strtok(alias, DELIMITERS);
+        }
+        else
+            token = strtok(dub, DELIMITERS);
+
+
+        while(token)
+        {
+            args[i] = token;
+            token = strtok(NULL, DELIMITERS);
+            i++;
+        }
+
+        args[i] = NULL;
+
+        if(args) {
+            if(*args[i - 1] == '\\') {
+                while(*args[i - 1] == '\\') {
+                    i--;
+                    args[i] == NULL;
+                    printf("> ");
+                    cmd = NULL;
+                    bufsize = 0;
+                    getline(&cmd, &bufsize, stdin);
+
+                    token = NULL;
+                    token = strtok(cmd, DELIMITERS);
+
+                    while(token)
+                    {
+                        args[i] = token;
+                        token = strtok(NULL, DELIMITERS);
+                        i++;
+                    }
+                    args[i] = NULL;
+                }
+            }
+
+            if (strcmp(args[0], "cd") == 0) {
+                if (chdir(args[1]) != 0) {
+                    perror("cd: ");
+                }
+            }
+            else if(strcmp(args[0], "hist") == 0)
+                get_history();
+            else if(strcmp(args[0], "exit") == 0)
+                exit(0);
+            else
+				
+                exec_process(args,i);
+        }
+
+        free(cmd);
+        free(args);
+    }
+}	

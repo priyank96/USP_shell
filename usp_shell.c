@@ -193,53 +193,48 @@ char *expand_stars(char *cmd)
 				while ((dir = readdir(d)) != NULL)
 				{
 						fil_names[num_files++] = strdup(dir->d_name);
-						printf("%s\n",fil_names[num_files-1]);
+		//				printf("%s\n",fil_names[num_files-1]);
 				}
 				closedir(d);
 		}
 
 	//get the string to match with
 	char *token = strtok(cmd, DELIMITERS);
+	char *temp;
 	while(token)
 	{
-			printf("token: %s\n",token);
+			
 			if(strstr(token,"*")!=NULL)
 			{
 				regex_t regex;
 				int reti;
-						/* Compile regular expression */
-				reti = regcomp(&regex, token, REG_EXTENDED);
-				printf("matching: %s",token);
+				/* Compile regular expression */
+				token[strlen(token)-1] = '\0';				
+				asprintf(&temp,"^[%s]+.*",token);
+				reti = regcomp(&regex, temp, REG_EXTENDED);
+				for(int i=0; i<num_files; i++)
+					{
+					/* Execute regular expression */
+						reti = regexec(&regex, fil_names[i], 0, NULL, 0);
+						if (reti != REG_NOMATCH) { // match
+							asprintf(&temp,"%s %s",new_cmd,fil_names[i]);
+							
+							//break;
+							new_cmd = temp;
+							}
 
-					for(int i=0; i<num_files; i++)
-						{
-
-
-							/* Compile regular expression */
-								/* Execute regular expression */
-									reti = regexec(&regex, fil_names[i], 0, NULL, 0);
-									if (reti != REG_NOMATCH) { // match
-										char *temp;
-										asprintf(&temp,"%s %s",new_cmd,fil_names[i]);
-										printf("here2 %s\n", temp);
-										//break;
-										new_cmd = temp;
-										}
-
-						}
+					}
 			}
 			else
 			{
 
-				char *temp;
 				asprintf(&temp,"%s %s",new_cmd,token);
-				printf("here2 %s\n", temp);
 				new_cmd = temp;
 			}
 		  token = strtok(NULL, DELIMITERS);
 	}
 
-	printf("New command: %s\n",new_cmd);
+	//printf("New command: %s\n",new_cmd);
 	//free(cmd);
 	return new_cmd;
 }
@@ -264,7 +259,7 @@ int main(int argc, char **argv)
         getline(&cmd, &bufsize, stdin); // no need to allocate memory getline will allocate on its own
 
 				put_history(cmd);
-				printf("here\n");
+				
 				cmd = expand_stars(cmd);
         char *dub = strdup(cmd);
         char **args = malloc(NUM_TOKEN * sizeof(char*));

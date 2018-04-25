@@ -8,6 +8,8 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include<regex.h>
+#include<readline/readline.h>
+#include<readline/history.h>
 
 #define MAX_CMD_LEN 100
 #define NUM_TOKEN 10
@@ -252,15 +254,17 @@ int main(int argc, char **argv)
         gethostname(host, sizeof(host));
         pass = getpwuid(getuid());
 
-        printf("%s@%s:" CYAN "%s" RESET "$ ", pass->pw_name, host, cwd);
-
+      // printf("%s@%s:" CYAN "%s" RESET "$ ", pass->pw_name, host, cwd);
+		
         char *cmd = NULL;
         long bufsize = 0;
-        getline(&cmd, &bufsize, stdin); // no need to allocate memory getline will allocate on its own
-
-				put_history(cmd);
-				
-				cmd = expand_stars(cmd);
+       //	 getline(&cmd, &bufsize, stdin); // no need to allocate memory getline will allocate on its own
+		char *prompt;
+		asprintf(&prompt,"%s@%s:" CYAN "%s" RESET "$ ", pass->pw_name, host, cwd);
+		cmd = readline(prompt);
+		put_history(cmd);
+		add_history(cmd);
+		cmd = expand_stars(cmd);
         char *dub = strdup(cmd);
         char **args = malloc(NUM_TOKEN * sizeof(char*));
         char *token = strtok(cmd, DELIMITERS);
@@ -268,10 +272,10 @@ int main(int argc, char **argv)
         int i = 0;
 
         char *alias = NULL;
-        if((alias = read_alias(token)) != NULL) {
-            token = strtok(alias, DELIMITERS);
-        }
-        else
+        //if((alias = read_alias(token)) != NULL) {
+        //    token = strtok(alias, DELIMITERS);
+        //}
+        //else
             token = strtok(dub, DELIMITERS);
 
 

@@ -5,7 +5,9 @@
 #include <string.h>
 #include <pwd.h>
 #include <time.h>
+#include <dirent.h>
 #include <fcntl.h>
+#include<regex.h>
 
 #define MAX_CMD_LEN 100
 #define NUM_TOKEN 10
@@ -89,8 +91,8 @@ int exec_process(char **args, int num_tokens) {
 	char **exec_args[NUM_CMDS];
 	exec_args[0] = malloc(NUM_TOKEN * sizeof(char*));
 	int args_count = 0;
-    
-	// for i/o redirection 
+
+	// for i/o redirection
     int in_fd = dup(0);
     int out_fd = dup(1);
 	int tmp_in = dup(0);
@@ -101,42 +103,42 @@ int exec_process(char **args, int num_tokens) {
 	int pipe_fd[2];
 	pipe(pipe_fd);
 
-	int i = 0;    
+	int i = 0;
 	while(i < num_tokens)
     {
 		if(strcmp(args[i],"|")==0)
 		{
-			exec_args[num_cmds-1][args_count] = NULL;			
-			exec_args[num_cmds] = malloc(NUM_TOKEN * sizeof(char*));			
+			exec_args[num_cmds-1][args_count] = NULL;
+			exec_args[num_cmds] = malloc(NUM_TOKEN * sizeof(char*));
 			num_cmds++;
-			args_count= 0;			
-			i++;				
+			args_count= 0;
+			i++;
 		}
         else if(strcmp(args[i],"<")==0)
         {
             in_fd = open(args[i+1],O_RDONLY);
-            i+=2;	    
+            i+=2;
 		}
         else if(strcmp(args[i],">")==0)
         {
-			
-						          
+
+
             out_file_fd = open(args[i+1],O_CREAT|O_WRONLY,0777);
             i+=2;
-			
-			
-	
+
+
+
 		}
 		else
 		{
 			exec_args[num_cmds-1][args_count++] = strdup(args[i++]);
-		}  
+		}
     }
 	exec_args[num_cmds-1][args_count] = NULL;
 	for(i=0;i<num_cmds;i++)
-	{		
+	{
 		dup2(in_fd,0);
-		close(in_fd); 
+		close(in_fd);
 		if( i+1 == num_cmds)
 		{
 			if(out_file_fd != -1)
@@ -158,8 +160,8 @@ int exec_process(char **args, int num_tokens) {
 
 		else if(pid==0)
 		{
-		    
-			
+
+
 			if (execvp(exec_args[i][0], exec_args[num_cmds-1]) == -1)
 		    {
 		        perror("Shell: can't exec \n");
@@ -170,12 +172,77 @@ int exec_process(char **args, int num_tokens) {
 		    perror("Shell: waitpid error: %s\n");
 	}
 	dup2(tmp_in,0);
-	dup2(tmp_out,1);	
-	
+	dup2(tmp_out,1);
+
 	for(i=0;i<num_cmds;i++)
 		free(exec_args[i]);
 }
 
+
+char *expand_stars(char *cmd)
+{
+	char *fil_names[100];
+	int num_files = 0;
+	char *new_cmd = strdup(" ");
+	// get all the file names from the directory
+		DIR *d;
+		struct dirent *dir;
+		d = opendir(".");
+		if (d)
+		{
+				while ((dir = readdir(d)) != NULL)
+				{
+						fil_names[num_files++] = strdup(dir->d_name);
+						printf("%s\n",fil_names[num_files-1]);
+				}
+				closedir(d);
+		}
+
+	//get the string to match with
+	char *token = strtok(cmd, DELIMITERS);
+	while(token)
+	{
+			printf("token: %s\n",token);
+			if(strstr(token,"*")!=NULL)
+			{
+				regex_t regex;
+				int reti;
+						/* Compile regular expression */
+				reti = regcomp(&regex, token, REG_EXTENDED);
+				printf("matching: %s",token);
+
+					for(int i=0; i<num_files; i++)
+						{
+
+
+							/* Compile regular expression */
+								/* Execute regular expression */
+									reti = regexec(&regex, fil_names[i], 0, NULL, 0);
+									if (reti != REG_NOMATCH) { // match
+										char *temp;
+										asprintf(&temp,"%s %s",new_cmd,fil_names[i]);
+										printf("here2 %s\n", temp);
+										//break;
+										new_cmd = temp;
+										}
+
+						}
+			}
+			else
+			{
+
+				char *temp;
+				asprintf(&temp,"%s %s",new_cmd,token);
+				printf("here2 %s\n", temp);
+				new_cmd = temp;
+			}
+		  token = strtok(NULL, DELIMITERS);
+	}
+
+	printf("New command: %s\n",new_cmd);
+	//free(cmd);
+	return new_cmd;
+}
 
 int main(int argc, char **argv)
 {
@@ -195,9 +262,10 @@ int main(int argc, char **argv)
         char *cmd = NULL;
         long bufsize = 0;
         getline(&cmd, &bufsize, stdin); // no need to allocate memory getline will allocate on its own
-		        
-		put_history(cmd);
-		
+
+				put_history(cmd);
+				printf("here\n");
+				cmd = expand_stars(cmd);
         char *dub = strdup(cmd);
         char **args = malloc(NUM_TOKEN * sizeof(char*));
         char *token = strtok(cmd, DELIMITERS);
@@ -254,11 +322,11 @@ int main(int argc, char **argv)
             else if(strcmp(args[0], "exit") == 0)
                 exit(0);
             else
-				
+
                 exec_process(args,i);
         }
 
         free(cmd);
         free(args);
     }
-}	
+}
